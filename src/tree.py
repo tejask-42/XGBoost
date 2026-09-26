@@ -2,8 +2,8 @@ import numpy as np
 
 
 class TreeNode:
-    def __init__(self, is_leaf=False, value=0.0, feature_index=None, threshold=None, 
-                 left=None, right=None, gain=0.0, default_direction=None):
+    def __init__(self, is_leaf=False, value=0.0, feature_index=None, threshold=None,
+                 left=None, right=None, gain=0.0, default_direction=None, depth=0):
         self.is_leaf = is_leaf
         self.value = value
         self.feature_index = feature_index
@@ -12,6 +12,13 @@ class TreeNode:
         self.right = right
         self.gain = gain
         self.default_direction = default_direction
+        self.depth = depth
+        # Optional fields populated by IncrementalXGBoostClassifier after training.
+        # None by default so the base XGBoostModel is completely unaffected.
+        self.indices = None   # np.ndarray of sample indices reaching this node
+        self.G = None         # sum of gradients at this node
+        self.H = None         # sum of hessians at this node
+
 
 
 class Tree:
@@ -34,16 +41,16 @@ class Tree:
         node_samples = len(indices)
         
         if node_samples == 0:
-            return TreeNode(is_leaf=True, value=0.0)
+            return TreeNode(is_leaf=True, value=0.0, depth=depth)
         
         if depth >= self.max_depth:
             value = self._leaf_value(grad, hess, indices)
-            return TreeNode(is_leaf=True, value=value)
+            return TreeNode(is_leaf=True, value=value, depth=depth)
         
         hess_sum = np.sum(hess[indices])
         if node_samples < 2 or hess_sum < self.min_child_weight:
             value = self._leaf_value(grad, hess, indices)
-            return TreeNode(is_leaf=True, value=value)
+            return TreeNode(is_leaf=True, value=value, depth=depth)
         
         # Only try sparsity if data is actually sparse
         split_info = None
@@ -58,13 +65,13 @@ class Tree:
         
         if split_info is None:
             value = self._leaf_value(grad, hess, indices)
-            return TreeNode(is_leaf=True, value=value)
+            return TreeNode(is_leaf=True, value=value, depth=depth)
         
         feature_index, threshold, gain, default_direction = split_info
         
         if gain < self.gamma:
             value = self._leaf_value(grad, hess, indices)
-            return TreeNode(is_leaf=True, value=value)
+            return TreeNode(is_leaf=True, value=value, depth=depth)
         
         feature_values_subset = X[indices, feature_index]
         left_indices, right_indices = self._split_indices(feature_values_subset, threshold, indices)
@@ -73,7 +80,8 @@ class Tree:
         right_node = self._build_tree(X, grad, hess, right_indices, depth + 1)
         
         return TreeNode(is_leaf=False, feature_index=feature_index, threshold=threshold,
-                       left=left_node, right=right_node, gain=gain, default_direction=default_direction)
+                       left=left_node, right=right_node, gain=gain, default_direction=default_direction,
+                       depth=depth)
 
 
     def _should_use_sparsity_split(self, X, indices):

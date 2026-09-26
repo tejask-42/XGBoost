@@ -33,17 +33,12 @@ class XGBoostModel:
                 self.scale_pos_weight = scale_pos_weight
             self.objective.scale_pos_weight = self.scale_pos_weight
         
-        # Initialize predictions
-        if self.params["objective_type"] == "classification":
-            pos_ratio = np.mean(y)
-            initial_pred = pos_ratio
-            preds = np.full(n_samples, initial_pred)
-            if X_val is not None:
-                val_preds = np.full(X_val.shape[0], initial_pred)
-        else:
-            preds = np.full(n_samples, np.mean(y))
-            if X_val is not None:
-                val_preds = np.full(X_val.shape[0], np.mean(y))
+        # Initialize predictions (raw margins)
+        # For classification, margin 0.0 corresponds to probability sigma(0) = 0.5.
+        # For regression, margin 0.0 starts with zero baseline.
+        preds = np.zeros(n_samples)
+        if X_val is not None:
+            val_preds = np.zeros(X_val.shape[0])
         
         # Initialize feature importance tracking
         self.feature_importance = np.zeros(n_features)
